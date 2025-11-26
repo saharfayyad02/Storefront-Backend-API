@@ -1,42 +1,148 @@
-# API Requirements
-The company stakeholders want to create an online storefront to showcase their great product ideas. Users need to be able to browse an index of all products, see the specifics of a single product, and add products to an order that they can view in a cart page. You have been tasked with building the API that will support this application, and your coworker is building the frontend.
+api_requirements:
+This document defines all API endpoints, database schema, and data shapes
+required for the Storefront Backend Project.
 
-These are the notes from a meeting with the frontend developer that describe what endpoints the API needs to supply, as well as data shapes the frontend and backend have agreed meet the requirements of the application. 
+endpoints:
+    users:
+      index:
+        route: /users
+        method: GET
+        auth: JWT required
+        description: Get all users
+      show:
+        route: /users/{id}
+        method: GET
+        auth: JWT required
+        description: Show a user and their 5 most recent purchases
+      create:
+        route: /users
+        method: POST
+        auth: public
+        description: Create new user and return JWT
+        body:
+          first_name: string
+          last_name: string
+          password: string
+      authenticate:
+        route: /users/authenticate
+        method: POST
+        auth: public
+        description: Authenticate user and return JWT
+        body:
+          first_name: string
+          password: string
 
-## API Endpoints
-#### Products
-- Index 
-- Show
-- Create [token required]
-- [OPTIONAL] Top 5 most popular products 
-- [OPTIONAL] Products by category (args: product category)
+    products:
+      index:
+        route: /products
+        method: GET
+        auth: public
+        description: List all products
+      show:
+        route: /products/{id}
+        method: GET
+        auth: public
+        description: Show product details
+      create:
+        route: /products
+        method: POST
+        auth: JWT required
+        description: Create a product
+        body:
+          name: string
+          price: number
+          category: string (optional)
+      by_category:
+        route: /products/category/{category}
+        method: GET
+        auth: public
+        description: Get products by category
+      top_products:
+        route: /products/top
+        method: GET
+        auth: public
+        description: Get top 5 most popular products
 
-#### Users
-- Index [token required]
-- Show [token required]
-- Create N[token required]
+    orders:
+      current:
+        route: /orders/current/{user_id}
+        method: GET
+        auth: JWT required
+        description: Get active order for a user
+      completed:
+        route: /orders/completed/{user_id}
+        method: GET
+        auth: JWT required
+        description: Get completed orders for a user
+      create:
+        route: /orders
+        method: POST
+        auth: JWT required
+        description: Create a new order
+        body:
+          status: active or complete
+      add_product:
+        route: /orders/{id}/products
+        method: POST
+        auth: JWT required
+        description: Add product to order
+        body:
+          product_id: number
+          quantity: number
+      show:
+        route: /orders/{id}
+        method: GET
+        auth: JWT required
+        description: Show order and items
 
-#### Orders
-- Current Order by user (args: user id)[token required]
-- [OPTIONAL] Completed Orders by user (args: user id)[token required]
+database_schema:
+    users:
+      id: SERIAL PRIMARY KEY
+      first_name: VARCHAR(100)
+      last_name: VARCHAR(100)
+      password_digest: VARCHAR(255)
+      created_at: timestamp
+      updated_at: timestamp
 
-## Data Shapes
-#### Product
--  id
-- name
-- price
-- [OPTIONAL] category
+    products:
+      id: SERIAL PRIMARY KEY
+      name: VARCHAR(255)
+      price: NUMERIC(10,2)
+      category: VARCHAR(100)
+      created_at: timestamp
+      updated_at: timestamp
 
-#### User
-- id
-- firstName
-- lastName
-- password
+    orders:
+      id: SERIAL PRIMARY KEY
+      user_id: INTEGER (FK users.id)
+      status: active or complete
+      created_at: timestamp
+      updated_at: timestamp
 
-#### Orders
-- id
-- id of each product in the order
-- quantity of each product in the order
-- user_id
-- status of order (active or complete)
+    order_products:
+      id: SERIAL PRIMARY KEY
+      order_id: INTEGER (FK orders.id)
+      product_id: INTEGER (FK products.id)
+      quantity: INTEGER
+      unique: (order_id, product_id)
 
+  data_shapes:
+    user:
+      id: number
+      first_name: string
+      last_name: string
+      password?: string
+    product:
+      id: number
+      name: string
+      price: number
+      category?: string
+    order:
+      id: number
+      user_id: number
+      status: string
+    order_product:
+      id: number
+      order_id: number
+      product_id: number
+      quantity: number

@@ -1,15 +1,24 @@
-import express, { Request, Response } from 'express'
-import bodyParser from 'body-parser'
+// src/server.ts
+import express, { Request, Response } from 'express';
+import usersRouter from './handlers/user';
+import productsRouter from './handlers/product';
+import ordersRouter from './handlers/order';
 
-const app: express.Application = express()
-const address: string = "0.0.0.0:3000"
+const app = express();
 
-app.use(bodyParser.json())
+app.use(express.json());  
 
-app.get('/', function (req: Request, res: Response) {
-    res.send('Hello World!')
-})
+app.use('/users', usersRouter);
+app.use('/products', productsRouter);
+app.use('/orders', ordersRouter);
 
-app.listen(3000, function () {
-    console.log(`starting app on: ${address}`)
-})
+console.log("Connected to DB:", process.env.POSTGRES_DB, process.env.POSTGRES_DB_TEST, process.env.ENV);
+
+if (process.env.ENV !== 'test') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
