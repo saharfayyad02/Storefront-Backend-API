@@ -1,183 +1,257 @@
-import supertest from 'supertest';
-import app from '../server';
 import { cleanupTestDatabase, setupTestDatabase } from './helpers/database.setup';
 import client from '../database';
-import { getAuthHeader } from './helpers/auth-helper';
-import { ProductStore } from '../models/ProductModule';
-import { UserStore } from '../models/userModule';
+import { Product, ProductStore } from '../models/ProductModule';
 
-const request = supertest(app);
-const productStore = new ProductStore();
-const userStore = new UserStore();
+const store = new ProductStore();
 
-describe('Product API Endpoints', () => {
-  let testUserId: number;
-  let testProductId: number;
+describe('Product Model', () => {
+  const testProduct: Product = {
+    name: 'Test Product',
+    price: 29.99,
+    category: 'electronics'
+  };
+
+  let createdProductId: number;
 
   beforeAll(async () => {
     await setupTestDatabase();
-    
-    // Create a test user for authentication
-    const user = await userStore.create({
-      first_name: 'TestUser',
-      last_name: 'Test',
-      password: 'testpass123'
-    });
-    testUserId = user.id as number;
   });
 
   afterAll(async () => {
-  await cleanupTestDatabase();
-});
+    await cleanupTestDatabase();
+   // await client.end();
+  });
 
   beforeEach(async () => {
     const conn = await client.connect();
+    await conn.query('DELETE FROM order_products');
+    await conn.query('DELETE FROM orders');
     await conn.query('DELETE FROM products');
     conn.release();
   });
 
-  describe('POST /products - Create Product', () => {
-    it('should create a product with valid token', async () => {
-      const response = await request
-        .post('/products')
-        .set('Authorization', getAuthHeader(testUserId))
-        .send({
-          name: 'Test Product',
-          price: 29.99,
-          category: 'electronics'
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.name).toBe('Test Product');
-      expect(response.body.price).toBe(29.99);
-      expect(response.body.category).toBe('electronics');
-      expect(response.body.id).toBeDefined();
-
-      testProductId = response.body.id;
+  describe('create method', () => {
+    it('should create a new product', async () => {
+      const result = await store.create(testProduct);
+      
+      expect(result.name).toBe(testProduct.name);
+      expect(result.price).toBe(testProduct.price);
+      expect(result.category).toBe(testProduct.category);
+      expect(result.id).toBeDefined();
+      
+      createdProductId = result.id as number;
     });
 
-    it('should return 401 without token', async () => {
-      const response = await request
-        .post('/products')
-        .send({
-          name: 'Test Product',
-          price: 29.99,
-          category: 'electronics'
-        });
-
-      expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Token required');
-    });
-
-    it('should return 401 with invalid token', async () => {
-      const response = await request
-        .post('/products')
-        .set('Authorization', 'Bearer invalid_token')
-        .send({
-          name: 'Test Product',
-          price: 29.99,
-          category: 'electronics'
-        });
-
-      expect(response.status).toBe(401);
-      expect(response.body.error).toBeDefined();
+    it('should create product with all required fields', async () => {
+      const result = await store.create(testProduct);
+      
+      expect(result.name).toBeDefined();
+      expect(result.price).toBeDefined();
+      expect(result.category).toBeDefined();
     });
   });
 
-  describe('GET /products - Get All Products', () => {
+  describe('index method', () => {
     beforeEach(async () => {
-      await productStore.create({
+      await store.create({
         name: 'Product 1',
         price: 19.99,
         category: 'electronics'
       });
-      await productStore.create({
+      await store.create({
         name: 'Product 2',
         price: 39.99,
         category: 'books'
       });
-    });
-
-    it('should return all products', async () => {
-      const response = await request.get('/products');
-
-      expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBe(2);
-    });
-  });
-
-  describe('GET /products/:id - Get Product By ID', () => {
-    beforeEach(async () => {
-      const product = await productStore.create({
-        name: 'Test Product',
-        price: 29.99,
-        category: 'electronics'
+      await store.create({
+        name: 'Product 3',
+        price: 49.99,
+        category: 'clothing'
       });
-      testProductId = product.id as number;
     });
 
-    it('should return a specific product', async () => {
-      const response = await request.get(`/products/${testProductId}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.id).toBe(testProductId);
-      expect(response.body.name).toBe('Test Product');
-      expect(response.body.price).toBe(29.99);
+    it('should return a list of all products', async () => {
+      const result = await store.index();
+      
+      expect(result).toBeDefined();
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(3);
     });
 
-    it('should return 400 for non-existent product', async () => {
-      const response = await request.get('/products/9999');
+    it('should return empty array when no products exist', async () => {
+      const conn = await client.connect();
+      await conn.query('DELETE FROM products');
+      conn.release();
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBeDefined();
+      const result = await store.index();
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
     });
   });
 
-  describe('GET /products/category/:category - Get Products By Category', () => {
+  describe('show method', () => {
     beforeEach(async () => {
-      await productStore.create({
+      const product = await store.create(testProduct);
+      createdProductId = product.id as number;
+    });
+
+    it('should return a specific product by id', async () => {
+      const result = await store.show(createdProductId);
+      
+      expect(result).toBeDefined();
+      expect(result.id).toBe(createdProductId);
+      expect(result.name).toBe(testProduct.name);
+      expect(result.price).toBe(testProduct.price);
+      expect(result.category).toBe(testProduct.category);
+    });
+
+    it('should throw error for non-existent product', async () => {
+    try {
+      await store.show(99999);
+      fail('Expected an error to be thrown');
+    } catch (err: any) {
+      expect(err.message).toBe('Product not found');
+    }
+  });
+  });
+
+  describe('productsByCategory method', () => {
+    beforeEach(async () => {
+      await store.create({
         name: 'Laptop',
         price: 999.99,
         category: 'electronics'
       });
-      await productStore.create({
+      await store.create({
         name: 'Phone',
         price: 599.99,
         category: 'electronics'
       });
-      await productStore.create({
+      await store.create({
         name: 'Book',
         price: 19.99,
         category: 'books'
       });
+      await store.create({
+        name: 'Shirt',
+        price: 29.99,
+        category: 'clothing'
+      });
     });
 
-    it('should return products in a specific category', async () => {
-      const response = await request.get('/products/category/electronics');
-
-      expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBe(2);
-      expect(response.body[0].category).toBe('electronics');
+    it('should return products in specific category', async () => {
+      const result = await store.productsByCategory('electronics');
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(2);
+      expect(result[0].category).toBe('electronics');
+      expect(result[1].category).toBe('electronics');
     });
 
     it('should return empty array for category with no products', async () => {
-      const response = await request.get('/products/category/nonexistent');
+      const result = await store.productsByCategory('nonexistent');
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
+    });
 
-      expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBe(0);
+    it('should be case-sensitive for category names', async () => {
+      const result = await store.productsByCategory('ELECTRONICS');
+      
+      expect(result.length).toBe(0);
     });
   });
 
-  describe('GET /products/top - Get Top 5 Popular Products', () => {
-    it('should return top 5 popular products', async () => {
-      // Create some products with orders (you'll need to implement this)
-      const response = await request.get('/products/top');
+  describe('top5 method', () => {
+    let userId: number;
+    let product1Id: number;
+    let product2Id: number;
+    let product3Id: number;
 
-      expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
+    beforeEach(async () => {
+      // Create user
+      const conn = await client.connect();
+      const userResult = await conn.query(
+        'INSERT INTO users (first_name, last_name, password_digest) VALUES ($1, $2, $3) RETURNING *',
+        ['Test', 'User', 'hash']
+      );
+      userId = userResult.rows[0].id;
+
+      // Create products
+      const p1 = await store.create({ name: 'Popular Product 1', price: 99.99, category: 'electronics' });
+      const p2 = await store.create({ name: 'Popular Product 2', price: 79.99, category: 'electronics' });
+      const p3 = await store.create({ name: 'Less Popular', price: 49.99, category: 'books' });
+      
+      product1Id = p1.id as number;
+      product2Id = p2.id as number;
+      product3Id = p3.id as number;
+
+      // Create orders with different quantities
+      // Product 1: 10 total quantity (most popular)
+      for (let i = 0; i < 2; i++) {
+        const orderResult = await conn.query(
+          'INSERT INTO orders (user_id, status) VALUES ($1, $2) RETURNING *',
+          [userId, 'complete']
+        );
+        await conn.query(
+          'INSERT INTO order_products (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+          [orderResult.rows[0].id, product1Id, 5]
+        );
+      }
+
+      // Product 2: 6 total quantity
+      for (let i = 0; i < 3; i++) {
+        const orderResult = await conn.query(
+          'INSERT INTO orders (user_id, status) VALUES ($1, $2) RETURNING *',
+          [userId, 'complete']
+        );
+        await conn.query(
+          'INSERT INTO order_products (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+          [orderResult.rows[0].id, product2Id, 2]
+        );
+      }
+
+      // Product 3: 2 total quantity (least popular)
+      const orderResult = await conn.query(
+        'INSERT INTO orders (user_id, status) VALUES ($1, $2) RETURNING *',
+        [userId, 'complete']
+      );
+      await conn.query(
+        'INSERT INTO order_products (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+        [orderResult.rows[0].id, product3Id, 2]
+      );
+
+      conn.release();
+    });
+
+    it('should return top 5 most popular products', async () => {
+      const result = await store.top5();
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBeLessThanOrEqual(5);
+    });
+
+    it('should order products by popularity (quantity sold)', async () => {
+      const result = await store.top5();
+      
+      expect(result.length).toBeGreaterThan(0);
+      // First product should be the most popular
+      expect(result[0].id).toBe(product1Id);
+    });
+
+    it('should return empty array when no orders exist', async () => {
+      const conn = await client.connect();
+     await conn.query('DELETE FROM order_products');
+    await conn.query('DELETE FROM orders');
+    await conn.query('DELETE FROM products');
+    await conn.query('DELETE FROM users');
+      conn.release();
+
+      const result = await store.top5();
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
     });
   });
 });
